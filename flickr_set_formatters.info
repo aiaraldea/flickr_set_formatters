@@ -1,0 +1,12 @@
+; $Id$
+name = CCK formatters for Flickr sets
+description = Flicker set formatters
+dependencies[] = content
+dependencies[] = flickrfield
+dependencies[] = flickr_sets
+dependencies[] = lightbox2
+core = 6.x
+project = "flickr_set_formatters"
+project status url = "http://burdinola.aiaraldea.com/fserver/fserver"
+version = "6.x-1.0-alpha3"
+

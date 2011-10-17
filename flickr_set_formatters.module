@@ -1,0 +1,158 @@
+<?php
+
+// $Id$
+
+/**
+ * Implementation of hook_field_formatter_info().
+ */
+function flickr_set_formatters_field_formatter_info() {
+  require_once(drupal_get_path('module', 'flickr') . '/flickr.inc');
+  foreach (flickr_photo_sizes () as $size => $info) {
+    $formatters[$size . '_primary_for_sets'] = array(
+        'label' => $info['label'] . ' primary image',
+        'field types' => array('flickrfield'),
+    );
+  }
+
+  return $formatters;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function flickr_set_formatters_theme() {
+  require_once(drupal_get_path('module', 'flickr') . '/flickr.inc');
+  $themes = array();
+
+  foreach (flickr_photo_sizes () as $size => $info) {
+    $themes['flickr_set_formatters_formatter_' . $size . '_primary_for_sets'] = array(
+        'arguments' => array('element'),
+        'function' => 'theme_flickr_set_formatters_field_formatter_primary_for_sets',
+    );
+  }
+  return $themes;
+}
+
+/**
+ * Basic flickrfield formatter.
+ */
+function theme_flickr_set_formatters_field_formatter_primary_for_sets($element) {
+  require_once(drupal_get_path('module', 'flickr') . '/flickr.inc');
+  $item = $element['#item'];
+  if (empty($item['id'])) {
+    return;
+  }
+  $node = $element['#node'];
+  $formatter = $element['#formatter'];
+  $field_name = $element['#field_name'];
+  switch ($item['type']) {
+    case 'photo_id':
+      $photo_data = flickr_photo_get_info($item['id']);
+      $img = flickr_img($photo_data, $formatter);
+      $photo_url = flickr_photo_page_url($photo_data['owner'], $photo_data['id']);
+      return theme('flickrfield_photo', $img, $photo_url, $formatter, $photo_data, $node);
+    case 'set_id':
+      $photo_data = flickr_photoset_get_info($item['id']);
+      return _theme_flickr_photoset_primary($photo_data, $photo_data['owner'], substr($formatter, 0, 1));
+  }
+}
+
+function _theme_flickr_photoset_primary($ps, $owner, $size, $attribs = NULL) {
+  if (module_exists('flickr_sets')) {
+    $photos = flickr_set_load($ps['id']);
+    $main_photo = $photos['photoset']['photo'][0];
+    $output .= "<div class='flickr-photoset'>\n";
+
+    foreach ((array) $photos['photoset']['photo'] as $photo) {
+      //insert owner into $photo because theme_flickr_photo needs it
+      $photo['owner'] = $owner;
+      if ($photo['isprimary'] == 1) {
+        $main_photo = $photo;
+      }
+    }
+    $output .= _theme_flickr_photo($main_photo, $size);
+    $output .= "</div><!-- end -->\n";
+    return $output;
+  } else {
+    $img = flickr_img($ps, $size, $attribs);
+    $output = theme('pager', NULL, variable_get('flickr_photos_per_page', 20));
+    $photo_url = flickr_photoset_page_url($owner, $ps['id']);
+    $output .= "<div class='flickr-photoset'>\n";
+    $title = is_array($ps['title']) ? $ps['title']['_content'] : $ps['title'];
+    return l($img, $photo_url, array('attributes' => array('title' => $title), 'absolute' => TRUE, 'html' => TRUE));
+  }
+}
+
+function _theme_flickr_photo($p, $size = NULL, $format = NULL, $attribs = NULL) {
+  $img = flickr_set_img($p, $size, $attribs);
+//  $photo_url = flickr_photo_page_url($p['owner'], $p['id']);
+  $title = is_array($p['title']) ? $p['title']['_content'] : $p['title'];
+  $output .= $img;
+  return $output;
+}
+
+/**
+ * This function will try to create a html image tag referencing the Flickr
+ * photo with the desired size if that size is available for this photo.
+ *
+ * @param $photo
+ *   the photo variable
+ * @param $size
+ *   the desired image size
+ * @param $attribs
+ *   an optional array of HTML attributes to pass to the image
+ *
+ * @return
+ *   a html image tag referencing the image of the desired
+ *   size if it is available.
+ */
+function flickr_set_img($photo, $size = NULL, $attributes = NULL) {
+  $sizes = flickr_photo_sizes();
+  if (!isset($size)) {
+    $size = '-';
+  }
+  if (!isset($sizes[$size])) {
+    return;
+  }
+  if (!isset($attributes) || !is_array($attributes)) {
+    $attributes = array();
+  }
+  if (empty($attributes['class'])) {
+    $attributes['class'] = NULL;
+  }
+
+  // photoset's use primary instead of id to specify the image.
+  if (isset($photo['primary'])) {
+    $id = $photo['primary'];
+//    $attributes['class'] = implode(' ', array($attributes['class'], 'flickr-photoset-img'));
+  }
+  else {
+    $id = $photo['id'];
+//    $attributes['class'] = implode(' ', array($attributes['class'], 'flickr-photo-img'));
+  }
+
+  if ($size == 's') {
+    $attributes['height'] = $attributes['width'] = 75;
+    $img_url = flickr_photo_img($photo, $size);
+  }
+  else {
+    $image_sizes = flickr_photo_get_sizes($id);
+    if ($image_sizes) {
+      foreach ($image_sizes as $image_size) {
+        if ($image_size['label'] == $sizes[$size]['label']) {
+          break;
+        }
+      }
+      if (isset($image_size)) {
+        $img_url = $image_size['source'];
+        $attributes['height'] = $image_size['height'];
+        $attributes['width'] = $image_size['width'];
+      }
+    }
+    else {
+      $img_url = flickr_photo_img($photo, $size);
+    }
+  }
+  $title = is_array($photo['title']) ? $photo['title']['_content'] : $photo['title'];
+  return theme('image', $img_url, $title, $title, $attributes, FALSE);
+}
